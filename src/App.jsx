@@ -99,7 +99,7 @@ export default function DAC() {
   useEffect(()=>{
     const autoFetch = async () => {
       try {
-        const url=`https://api.etherscan.io/api?module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=AZ22N7MWSRDG4934C48KYR2QXEF57M4QW7`;
+        const url=`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=AZ22N7MWSRDG4934C48KYR2QXEF57M4QW7`;
         const res=await fetch(url); const json=await res.json();
         if(json.status==="1"&&json.result?.length>0){
           const txs=json.result.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)}));
@@ -114,7 +114,7 @@ export default function DAC() {
     if(!apiKey.trim()) return;
     setLoading(true); setError(null);
     try {
-      const url=`https://api.etherscan.io/api?module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=${apiKey}`;
+      const url=`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=${apiKey}`;
       const res=await fetch(url); const json=await res.json();
       if(json.status==="1"&&json.result?.length>0){
         const txs=json.result.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)}));
