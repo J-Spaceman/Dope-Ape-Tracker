@@ -99,16 +99,19 @@ export default function DAC() {
     (async()=>{
       try {
         let allTxs = [];
-        for(let page=1; page<=10; page++){
-          setLoadingProgress(page*10);
+        const PAGES = 5;
+        for(let page=1; page<=PAGES; page++){
+          setLoadingProgress(Math.round((page/PAGES)*100));
           try {
-            const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=${page}&offset=1000&sort=asc&apikey=${API_KEY}`);
+            const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=${page}&offset=1000&sort=desc&apikey=${API_KEY}`);
             const j=await r.json();
             if(j.status==="1"&&j.result?.length>0){
               allTxs = [...allTxs, ...j.result];
               if(j.result.length < 1000) break;
             } else { break; }
-          } catch { break; }
+          } catch { /* skip failed page */ }
+          // Respect Etherscan rate limit (5 calls/sec)
+          if(page < PAGES) await new Promise(res=>setTimeout(res,250));
         }
         if(allTxs.length>0){
           setTransfers(allTxs.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)})));
