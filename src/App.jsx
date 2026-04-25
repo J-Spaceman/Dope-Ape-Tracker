@@ -83,6 +83,7 @@ export default function DAC() {
   const [apiKey,setApiKey]         = useState(API_KEY);
   const [showInput,setShowInput]   = useState(false);
   const [error,setError]           = useState(null);
+  const [loadingProgress,setLoadingProgress] = useState(0);
   const [isMobile,setIsMobile]     = useState(false);
   const svgRef = useRef(null);
 
@@ -95,13 +96,24 @@ export default function DAC() {
   useEffect(()=>{
     (async()=>{
       try {
-        const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=${API_KEY}`);
-        const j=await r.json();
-        if(j.status==="1"&&j.result?.length>0){
-          setTransfers(j.result.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)})));
+        let allTxs = [];
+        for(let page=1; page<=10; page++){
+          setLoadingProgress(page*10);
+          const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=${page}&offset=1000&sort=asc&apikey=${API_KEY}`);
+          const j=await r.json();
+          if(j.status==="1"&&j.result?.length>0){
+            allTxs = [...allTxs, ...j.result];
+            if(j.result.length < 1000) break; // no more pages
+          } else {
+            break;
+          }
+        }
+        if(allTxs.length>0){
+          setTransfers(allTxs.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)})));
           setDemoMode(false);
         }
-      } catch{}
+        setLoadingProgress(0);
+      } catch{ setLoadingProgress(0); }
     })();
   },[]);
 
@@ -405,7 +417,27 @@ export default function DAC() {
         ::-webkit-scrollbar{width:3px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:#222;border-radius:3px;}
         @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
         @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
       `}</style>
+
+      {/* LOADING OVERLAY */}
+      {loadingProgress>0&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.85)",
+          zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+          <div style={{width:48,height:48,border:"3px solid rgba(245,195,0,0.2)",
+            borderTop:"3px solid #F5C300",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,color:"#F5C300"}}>
+            Loading On-Chain Data
+          </div>
+          <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",letterSpacing:"0.1em"}}>
+            FETCHING FULL HISTORY · {loadingProgress}%
+          </div>
+          <div style={{width:200,height:3,background:"rgba(255,255,255,0.08)",borderRadius:2,overflow:"hidden"}}>
+            <div style={{height:"100%",background:"#F5C300",borderRadius:2,
+              width:loadingProgress+"%",transition:"width 0.3s ease"}}/>
+          </div>
+        </div>
+      )}
 
       {/* TOP BAR */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
