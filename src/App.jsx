@@ -44,8 +44,9 @@ const DEMO = (() => {
 })();
 
 const nodeR = (d) => d.isMP ? 13 : Math.max(5,Math.min(14,4+(d.sent+d.received)*0.55));
-const nodeColor = (d,ws) => {
-  if(ws.has(d.id)) return "#F5C300";
+const nodeColor = (d,ws,holdings,hl) => {
+  if(hl===d.id) return "#FFFFFF";
+  if(ws.has(d.id)||(holdings[d.id]||0)>=150) return "#F5C300";
   if(d.isMP) return "#555";
   const a=d.sent+d.received;
   if(a>10) return "#FFF"; if(a>4) return "#CCC"; return "#555";
@@ -84,6 +85,7 @@ export default function DAC() {
   const [showInput,setShowInput]   = useState(false);
   const [error,setError]           = useState(null);
   const [loadingProgress,setLoadingProgress] = useState(0);
+  const [highlightedNode,setHighlightedNode] = useState(null);
   const [isMobile,setIsMobile]     = useState(false);
   const svgRef = useRef(null);
 
@@ -99,14 +101,14 @@ export default function DAC() {
         let allTxs = [];
         for(let page=1; page<=10; page++){
           setLoadingProgress(page*10);
-          const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=${page}&offset=1000&sort=asc&apikey=${API_KEY}`);
-          const j=await r.json();
-          if(j.status==="1"&&j.result?.length>0){
-            allTxs = [...allTxs, ...j.result];
-            if(j.result.length < 1000) break; // no more pages
-          } else {
-            break;
-          }
+          try {
+            const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=${page}&offset=1000&sort=asc&apikey=${API_KEY}`);
+            const j=await r.json();
+            if(j.status==="1"&&j.result?.length>0){
+              allTxs = [...allTxs, ...j.result];
+              if(j.result.length < 1000) break;
+            } else { break; }
+          } catch { break; }
         }
         if(allTxs.length>0){
           setTransfers(allTxs.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)})));
@@ -190,7 +192,7 @@ export default function DAC() {
 
   const graph = useMemo(()=>{
     let txs=transfers;
-    if(filterMode==="buysell")    txs=transfers.filter(t=>t.marketplace);
+    if(filterMode==="buysell")    txs=transfers.filter(t=>!isNull(t.from));
     if(filterMode==="walletonly") txs=transfers.filter(t=>!t.marketplace);
     const nm={},lm={};
     txs.forEach(tx=>{
@@ -243,12 +245,14 @@ export default function DAC() {
         setSelected(graph.nodes.find(n=>n.id===d.id)||null);
         setRightTab("inspector");
       });
-    ng.filter(d=>ws.has(d.id)).append("circle").attr("r",d=>nodeR(d)+7)
+    ng.filter(d=>ws.has(d.id)||(holdings[d.id]||0)>=150).append("circle").attr("r",d=>nodeR(d)+7)
       .attr("fill","none").attr("stroke","rgba(245,195,0,0.2)").attr("stroke-width",1.5);
+    ng.filter(d=>highlightedNode===d.id).append("circle").attr("r",d=>nodeR(d)+11)
+      .attr("fill","none").attr("stroke","rgba(255,255,255,0.6)").attr("stroke-width",2);
     ng.append("circle").attr("r",d=>nodeR(d))
-      .attr("fill",d=>nodeColor(d,ws)).attr("fill-opacity",0.9)
-      .attr("filter",d=>ws.has(d.id)?"url(#gy)":d.isMP?"url(#gg)":"url(#gw)")
-      .attr("stroke",d=>ws.has(d.id)?"rgba(245,195,0,0.5)":d.isMP?"rgba(100,100,100,0.3)":"rgba(255,255,255,0.18)")
+      .attr("fill",d=>nodeColor(d,ws,holdings,highlightedNode)).attr("fill-opacity",0.9)
+      .attr("filter",d=>highlightedNode===d.id?"url(#gw)":ws.has(d.id)||(holdings[d.id]||0)>=150?"url(#gy)":d.isMP?"url(#gg)":"url(#gw)")
+      .attr("stroke",d=>highlightedNode===d.id?"rgba(255,255,255,0.9)":ws.has(d.id)||(holdings[d.id]||0)>=150?"rgba(245,195,0,0.5)":d.isMP?"rgba(100,100,100,0.3)":"rgba(255,255,255,0.18)")
       .attr("stroke-width",1);
     ng.filter(d=>d.isMP||(d.sent+d.received>8))
       .append("text").text(d=>d.isMP?(d.name||short(d.id)):short(d.id))
@@ -260,9 +264,9 @@ export default function DAC() {
           .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
       ng.attr("transform",d=>`translate(${d.x||0},${d.y||0})`);
     });
-    svg.on("click",()=>setSelected(null));
+    svg.on("click",()=>{setSelected(null);setHighlightedNode(null);});
     return ()=>sim.stop();
-  },[graph,whaleAlerts]);
+  },[graph,whaleAlerts,holdings,highlightedNode]);
 
   const stats=useMemo(()=>({
     txs:transfers.length,
@@ -335,7 +339,7 @@ export default function DAC() {
     : <>{top10.map((h,i)=>(
       <div key={h.addr} onClick={()=>{
         const node=graph.nodes.find(n=>n.id===h.addr);
-        if(node){setSelected(node);setRightTab("inspector");}
+        if(node){setSelected(node);setRightTab("inspector");setHighlightedNode(h.addr);}
       }} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 9px",marginBottom:5,
         borderRadius:9,cursor:"pointer",background:"rgba(255,255,255,0.02)",
         border:"1px solid rgba(255,255,255,0.05)",transition:"all 0.15s"}}
@@ -498,7 +502,7 @@ export default function DAC() {
             <Tile label="TOTAL TRANSFERS" value={stats.txs}     accent="#F5C300"/>
             <Tile label="UNIQUE WALLETS"  value={stats.wallets} accent="#FFF"/>
             <Tile label="TOKENS TRACKED"  value={stats.tokens}  accent="#888"/>
-            <Tile label="MARKET SALES"    value={stats.mkt}     accent="#F5C300"/>
+            <Tile label="SECONDARY TX"    value={stats.mkt}     accent="#F5C300"/>
           </div>
           <div style={{...card}}>
             <div style={{padding:"11px 13px 9px",borderBottom:"1px solid #141414"}}>
@@ -543,7 +547,7 @@ export default function DAC() {
               <Tile label="TOTAL TRANSFERS" value={stats.txs}     accent="#F5C300"/>
               <Tile label="UNIQUE WALLETS"  value={stats.wallets} accent="#FFFFFF"/>
               <Tile label="TOKENS TRACKED"  value={stats.tokens}  accent="#888888"/>
-              <Tile label="MARKET SALES"    value={stats.mkt}     accent="#F5C300"/>
+              <Tile label="SECONDARY TX"    value={stats.mkt}     accent="#F5C300"/>
             </div>
             <div style={{flex:1,display:"flex",gap:10,overflow:"hidden",minHeight:0}}>
               <div style={{...card,flex:1,display:"flex",flexDirection:"column",minWidth:0}}>
