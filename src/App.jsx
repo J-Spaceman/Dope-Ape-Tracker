@@ -13,7 +13,7 @@ const MARKETPLACES = {
   "0x0000000000000000000000000000000000000000": "Mint", // excluded from sales
 };
 const NULL_ADDR = "0x0000000000000000000000000000000000000000";
-const isMP   = (a) => !!MARKETPLACES[a?.toLowerCase()] && a?.toLowerCase() !== NULL_ADDR;
+const isMP   = (a) => !!MARKETPLACES[a?.toLowerCase()] && !isNull(a);
 const isNull = (a) => a?.toLowerCase() === NULL_ADDR;
 const short  = (a) => a ? `${a.slice(0,6)}…${a.slice(-4)}` : "";
 const rndHex = (n) => [...Array(n)].map(()=>Math.floor(Math.random()*16).toString(16)).join("");
@@ -124,7 +124,10 @@ export default function DAC() {
       const r=await fetch(`https://api.etherscan.io/v2/api?chainid=1&module=account&action=tokennfttx&contractaddress=${CONTRACT}&page=1&offset=1000&sort=desc&apikey=${apiKey}`);
       const j=await r.json();
       if(j.status==="1"&&j.result?.length>0){
-        setTransfers(j.result.map(tx=>({...tx,marketplace:isMP(tx.from)||isMP(tx.to)})));
+        setTransfers(j.result.map(tx=>({
+          ...tx,
+          marketplace: (isMP(tx.from)||isMP(tx.to)) && !isNull(tx.from),
+        })));
         setDemoMode(false); setShowInput(false);
       } else setError(j.message||"No data returned");
     } catch(e){ setError(e.message); }
@@ -196,7 +199,7 @@ export default function DAC() {
       nm[f].sent++; nm[t].received++;
       const k=`${f}>${t}`; if(!lm[k]) lm[k]={source:f,target:t,count:0}; lm[k].count++;
     });
-    const nodes=Object.values(nm).sort((a,b)=>(b.sent+b.received)-(a.sent+a.received)).slice(0,90);
+    const nodes=Object.values(nm).sort((a,b)=>(b.sent+b.received)-(a.sent+a.received)).slice(0,55);
     const ids=new Set(nodes.map(n=>n.id));
     return {nodes,links:Object.values(lm).filter(l=>ids.has(l.source)&&ids.has(l.target))};
   },[transfers,filterMode]);
@@ -219,11 +222,13 @@ export default function DAC() {
     const ws=new Set(whaleAlerts.map(a=>a.addr));
     const sn=graph.nodes.map(n=>({...n})),sl=graph.links.map(l=>({...l}));
     const sim=d3.forceSimulation(sn)
-      .force("link",d3.forceLink(sl).id(d=>d.id).distance(d=>30+d.count*4).strength(0.7))
-      .force("charge",d3.forceManyBody().strength(d=>d.isMP?-120:-35))
-      .force("center",d3.forceCenter(W/2,H/2).strength(0.08))
-      .force("collide",d3.forceCollide(d=>nodeR(d)+3))
-      .alphaDecay(0.02);
+      .force("link",d3.forceLink(sl).id(d=>d.id).distance(20).strength(0.5))
+      .force("charge",d3.forceManyBody().strength(-25))
+      .force("center",d3.forceCenter(W/2,H/2).strength(0.25))
+      .force("x",d3.forceX(W/2).strength(0.06))
+      .force("y",d3.forceY(H/2).strength(0.06))
+      .force("collide",d3.forceCollide(d=>nodeR(d)+4))
+      .alphaDecay(0.015);
     const link=g.append("g").selectAll("line").data(sl).join("line")
       .attr("stroke",d=>d.count>2?"rgba(245,195,0,0.14)":"rgba(255,255,255,0.05)")
       .attr("stroke-width",d=>Math.min(d.count*0.6,2));
