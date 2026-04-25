@@ -10,10 +10,10 @@ const MARKETPLACES = {
   "0x000000000000ad05ccc4f10045630fb830b95127": "Blur",
   "0x59728544b08ab483533076417fbbb2fd0b17ce3a": "LooksRare",
   "0x74312363e45dcaba76c59ec49a7aa8a65a67eed": "X2Y2",
-  "0x0000000000000000000000000000000000000000": "Mint",
+  "0x0000000000000000000000000000000000000000": "Mint", // excluded from sales
 };
 const NULL_ADDR = "0x0000000000000000000000000000000000000000";
-const isMP   = (a) => !!MARKETPLACES[a?.toLowerCase()];
+const isMP   = (a) => !!MARKETPLACES[a?.toLowerCase()] && a?.toLowerCase() !== NULL_ADDR;
 const isNull = (a) => a?.toLowerCase() === NULL_ADDR;
 const short  = (a) => a ? `${a.slice(0,6)}…${a.slice(-4)}` : "";
 const rndHex = (n) => [...Array(n)].map(()=>Math.floor(Math.random()*16).toString(16)).join("");
@@ -219,10 +219,11 @@ export default function DAC() {
     const ws=new Set(whaleAlerts.map(a=>a.addr));
     const sn=graph.nodes.map(n=>({...n})),sl=graph.links.map(l=>({...l}));
     const sim=d3.forceSimulation(sn)
-      .force("link",d3.forceLink(sl).id(d=>d.id).distance(d=>50+d.count*9).strength(0.38))
-      .force("charge",d3.forceManyBody().strength(d=>d.isMP?-260:-65))
-      .force("center",d3.forceCenter(W/2,H/2))
-      .force("collide",d3.forceCollide(d=>nodeR(d)+5));
+      .force("link",d3.forceLink(sl).id(d=>d.id).distance(d=>30+d.count*4).strength(0.7))
+      .force("charge",d3.forceManyBody().strength(d=>d.isMP?-120:-35))
+      .force("center",d3.forceCenter(W/2,H/2).strength(0.08))
+      .force("collide",d3.forceCollide(d=>nodeR(d)+3))
+      .alphaDecay(0.02);
     const link=g.append("g").selectAll("line").data(sl).join("line")
       .attr("stroke",d=>d.count>2?"rgba(245,195,0,0.14)":"rgba(255,255,255,0.05)")
       .attr("stroke-width",d=>Math.min(d.count*0.6,2));
